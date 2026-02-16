@@ -110,29 +110,51 @@ with st.sidebar:
                         
                         # Генерируем Word отчет
                         try:
-                            report_filename = f"report_{st.session_state['timestamp']}_{os.path.splitext(uploaded_file.name)[0]}.docx"
+                            clean_name = os.path.splitext(uploaded_file.name)[0]
+                            report_filename = f"report_{st.session_state['timestamp']}_{clean_name}.docx"
                             report_path = os.path.join(tempfile.gettempdir(), report_filename)
                             generated_report_path = analyzer.generate_word_report(results, presentation_stats, report_path)
                             
                             if generated_report_path and os.path.exists(generated_report_path):
                                 st.session_state['report_path'] = generated_report_path
                                 st.success(f"✅ Word отчет сгенерирован!")
+                                file_size = os.path.getsize(generated_report_path) / 1024
+                                st.caption(f"Размер отчета: {file_size:.1f} KB")
                         except Exception as e:
                             st.warning(f"Не удалось сгенерировать Word отчет: {e}")
+                            traceback.print_exc()
                         
                         # Генерируем исправленную презентацию
                         try:
-                            generator = PresentationGenerator(tmp_path, "template.pptx")
-                            presentation_filename = f"fixed_{st.session_state['timestamp']}_{os.path.splitext(uploaded_file.name)[0]}.pptx"
-                            presentation_path = os.path.join(tempfile.gettempdir(), presentation_filename)
-                            
-                            generated_presentation_path = generator.fix_presentation(presentation_path)
-                            
-                            if generated_presentation_path and os.path.exists(generated_presentation_path):
-                                st.session_state['presentation_path'] = generated_presentation_path
-                                st.success(f"✅ Исправленная презентация сгенерирована!")
+                            # Проверяем, существует ли файл шаблона
+                            template_path = "template.pptx"
+                            if not os.path.exists(template_path):
+                                st.warning("Файл template.pptx не найден в корневой папке")
+                            else:
+                                generator = PresentationGenerator(tmp_path, template_path)
+                                
+                                # Создаем уникальное имя для файла
+                                clean_name = os.path.splitext(uploaded_file.name)[0]
+                                presentation_filename = f"fixed_{st.session_state['timestamp']}_{clean_name}.pptx"
+                                
+                                # Сохраняем в ту же временную папку
+                                presentation_path = os.path.join(tempfile.gettempdir(), presentation_filename)
+                                
+                                st.info("Генерация исправленной презентации...")
+                                generated_presentation_path = generator.fix_presentation(presentation_path)
+                                
+                                if generated_presentation_path and os.path.exists(generated_presentation_path):
+                                    st.session_state['presentation_path'] = generated_presentation_path
+                                    st.success(f"✅ Исправленная презентация сгенерирована!")
+                                    
+                                    # Для отладки - покажем размер файла
+                                    file_size = os.path.getsize(generated_presentation_path) / (1024*1024)
+                                    st.caption(f"Размер файла: {file_size:.2f} MB")
+                                else:
+                                    st.error("Не удалось создать исправленную презентацию")
                         except Exception as e:
-                            st.warning(f"Не удалось сгенерировать исправленную презентацию: {e}")
+                            st.error(f"Ошибка генерации презентации: {str(e)}")
+                            traceback.print_exc()
                         
                         st.success(f"✅ Анализ завершен! Проанализировано слайдов: {len(results)}")
                         st.rerun()
@@ -295,31 +317,39 @@ if st.session_state['results'] is not None:
         
         with col1:
             if st.session_state['report_path'] and os.path.exists(st.session_state['report_path']):
-                with open(st.session_state['report_path'], 'rb') as f:
-                    report_data = f.read()
-                
-                st.download_button(
-                    label="📥 Скачать Word отчет",
-                    data=report_data,
-                    file_name=f"анализ_презентации_{os.path.splitext(st.session_state['original_name'])[0]}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True
-                )
+                try:
+                    with open(st.session_state['report_path'], 'rb') as f:
+                        report_data = f.read()
+                    
+                    st.download_button(
+                        label="📥 Скачать Word отчет",
+                        data=report_data,
+                        file_name=f"анализ_презентации_{os.path.splitext(st.session_state['original_name'])[0]}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                        key="download_report"
+                    )
+                except Exception as e:
+                    st.error(f"Ошибка при подготовке отчета: {e}")
             else:
                 st.button("📥 Word отчет не доступен", disabled=True, use_container_width=True)
         
         with col2:
             if st.session_state['presentation_path'] and os.path.exists(st.session_state['presentation_path']):
-                with open(st.session_state['presentation_path'], 'rb') as f:
-                    pres_data = f.read()
-                
-                st.download_button(
-                    label="🔄 Скачать исправленную презентацию",
-                    data=pres_data,
-                    file_name=f"исправленная_{st.session_state['original_name']}",
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    use_container_width=True
-                )
+                try:
+                    with open(st.session_state['presentation_path'], 'rb') as f:
+                        pres_data = f.read()
+                    
+                    st.download_button(
+                        label="📥 Скачать исправленную презентацию",
+                        data=pres_data,
+                        file_name=f"исправленная_{st.session_state['original_name']}",
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        use_container_width=True,
+                        key="download_pres"
+                    )
+                except Exception as e:
+                    st.error(f"Ошибка при подготовке файла: {e}")
             else:
                 st.button("🔄 Исправленная презентация не доступна", disabled=True, use_container_width=True)
         
